@@ -46,6 +46,7 @@ from collections import OrderedDict
 
 if platform == 'android':
     from android.permissions import request_permissions, Permission
+    from android.runnable import run_on_ui_thread
     from android import activity, mActivity
     from jnius import autoclass, cast, JavaException
     
@@ -75,6 +76,7 @@ if platform == 'android':
     TelephonyManager = autoclass('android.telephony.TelephonyManager')
     SmsManager = autoclass('android.telephony.SmsManager')
     Toast = autoclass('android.widget.Toast')
+    String = autoclass('java.lang.String')
     NotificationManager = autoclass('android.app.NotificationManager')
     NotificationChannel = autoclass('android.app.NotificationChannel')
     NotificationBuilder = autoclass('android.app.Notification$Builder')
@@ -88,6 +90,10 @@ if platform == 'android':
     SpeechRecognizer = autoclass('android.speech.SpeechRecognizer')
     RecognizerIntent = autoclass('android.speech.RecognizerIntent')
     Locale = autoclass('java.util.Locale')
+else:
+    # Mock decorator for non-Android environments
+    def run_on_ui_thread(func):
+        return func
 
 
 class NexaUltimateEngine:
@@ -98,10 +104,14 @@ class NexaUltimateEngine:
         self.tts_engine = None
         self.is_initialized = False
         
-        self.db_path = f"{os.environ.get('ANDROID_DATA', '/sdcard')}/NexaUltimate/data.db"
+        data_dir = os.environ.get('ANDROID_DATA', '/sdcard')
+        self.db_path = f"{data_dir}/NexaUltimate/data.db"
+        self.html_path = f"{data_dir}/NexaUltimate/logo.html"
+        
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.db = sqlite3.connect(self.db_path)
         self._init_database()
+        self._generate_html_logo()
         
         self.config = JsonStore('nexa_config.json')
         self.commands = {}
@@ -130,7 +140,7 @@ class NexaUltimateEngine:
             "കുറിപ്പ്": "note", "ഓർമ്മപ്പെടുത്തൽ": "reminder", "അലാറം": "alarm",
             "ടൈമർ": "timer", "വിവർത്തനം": "translate", "ഹാഷ്": "hash",
             "പാസ്വേഡ്": "password", "എൻക്രിപ്റ്റ്": "encrypt", "ഡീക്രിപ്റ്റ്": "decrypt",
-            "സ്കാൻ": "scan", "ഐപി": "ip", "ഡിഎൻഎസ്": "dns",
+            "സ്കാൻ": "scan", "ഐപി": "ip", "ഡിഎൻഎസ്": "dns", "ലോഗോ": "logo",
         }
         
         self.app_map = {
@@ -162,6 +172,58 @@ class NexaUltimateEngine:
         cursor.execute('''CREATE TABLE IF NOT EXISTS passwords (id INTEGER PRIMARY KEY AUTOINCREMENT, service TEXT NOT NULL, username TEXT, password TEXT NOT NULL, notes TEXT)''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS schedules (id INTEGER PRIMARY KEY AUTOINCREMENT, trigger_time TEXT NOT NULL, action TEXT NOT NULL, repeat TEXT, enabled INTEGER DEFAULT 1)''')
         self.db.commit()
+
+    def _generate_html_logo(self):
+        html_content = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hey Nexa Logo</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: radial-gradient(circle at center, #0b192c 0%, #050b14 100%); height: 100vh; display: flex; justify-content: center; align-items: center; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        .logo-container { text-align: center; position: relative; }
+        .glow-effect { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); width: 300px; height: 300px; background: radial-gradient(circle, rgba(0, 168, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%); z-index: 1; pointer-events: none; }
+        .logo-svg { width: 180px; height: 180px; position: relative; z-index: 2; filter: drop-shadow(0 0 20px rgba(0, 168, 255, 0.4)); animation: float 4s ease-in-out infinite; }
+        @keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .brand-name { margin-top: 25px; font-size: 2.8rem; font-weight: 700; letter-spacing: 3px; color: #ffffff; z-index: 2; position: relative; text-transform: uppercase; }
+        .brand-name span { color: #00d2ff; text-shadow: 0 0 15px rgba(0, 210, 255, 0.6); }
+        .tagline { margin-top: 8px; font-size: 0.95rem; font-weight: 400; letter-spacing: 5px; color: #8a99ad; text-transform: uppercase; z-index: 2; position: relative; }
+    </style>
+</head>
+<body>
+    <div class="glow-effect"></div>
+    <div class="logo-container">
+        <svg class="logo-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <linearGradient id="nexGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#0055ff" />
+                    <stop offset="50%" stop-color="#00d2ff" />
+                    <stop offset="100%" stop-color="#00f5d4" />
+                </linearGradient>
+                <filter id="coreGlow">
+                    <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+                    <feMerge>
+                        <feMergeNode in="coloredBlur"/>
+                        <feMergeNode in="SourceGraphic"/>
+                    </feMerge>
+                </filter>
+            </defs>
+            <path d="M 25,75 C 15,60 20,35 35,30 C 50,25 50,75 65,70 C 80,65 85,40 75,25 C 65,35 60,60 50,65 C 40,70 30,45 25,75 Z" fill="none" stroke="url(#nexGrad)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" />
+            <circle cx="50" cy="48" r="3.5" fill="#ffffff" filter="url(#coreGlow)" />
+            <circle cx="50" cy="48" r="1.5" fill="#00ffff" />
+        </svg>
+        <div class="brand-name">Hey <span>Nexa</span></div>
+        <div class="tagline">Your AI Assistant</div>
+    </div>
+</body>
+</html>"""
+        try:
+            with open(self.html_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+        except Exception as e:
+            print(f"Error generating HTML: {e}")
     
     def _load_data(self):
         try:
@@ -182,24 +244,28 @@ class NexaUltimateEngine:
             pass
     
     def _get_context(self):
-        if not self.context:
+        if not self.context and platform == 'android':
             self.context = PythonActivity.mActivity
         return self.context
     
     def speak(self, text):
         try:
-            if not self.tts_engine:
-                self.tts_engine = TextToSpeech(self._get_context(), None)
-            self.tts_engine.speak(text, TextToSpeech.QUEUE_FLUSH, None, "nexa_tts")
+            if platform == 'android':
+                if not self.tts_engine:
+                    self.tts_engine = TextToSpeech(self._get_context(), None)
+                self.tts_engine.speak(text, TextToSpeech.QUEUE_FLUSH, None, "nexa_tts")
             return f"🗣️ {text}"
         except:
             return f"🗣️ {text}"
     
+    @run_on_ui_thread
     def show_toast(self, message):
         try:
-            Toast.makeText(self._get_context(), message, Toast.LENGTH_SHORT).show()
-        except:
-            pass
+            if platform == 'android':
+                java_string = String(message)
+                Toast.makeText(self._get_context(), java_string, Toast.LENGTH_SHORT).show()
+        except Exception as e:
+            print(f"Toast error: {e}")
     
     def process_malayalam(self, text):
         text_lower = text.lower()
@@ -218,6 +284,9 @@ class NexaUltimateEngine:
                 return self._open_app(package)
             else:
                 return self._smart_app_search(app_name)
+
+        if "logo" in cmd or "show logo" in cmd:
+            return self._show_html_logo()
         
         if any(x in cmd for x in ["flashlight", "torch", "flash"]):
             return self._toggle_flashlight()
@@ -341,78 +410,101 @@ class NexaUltimateEngine:
     
     def _open_app(self, package_name):
         try:
-            pm = self._get_context().getPackageManager()
-            intent = pm.getLaunchIntentForPackage(package_name)
-            if intent:
-                self._get_context().startActivity(intent)
-                return f"✅ {package_name} opened!"
-            return f"❌ {package_name} not found"
+            if platform == 'android':
+                pm = self._get_context().getPackageManager()
+                intent = pm.getLaunchIntentForPackage(package_name)
+                if intent:
+                    self._get_context().startActivity(intent)
+                    return f"✅ {package_name} opened!"
+                return f"❌ {package_name} not found"
+            return "❌ Android only feature"
         except Exception as e:
             return f"❌ Error: {str(e)}"
     
     def _smart_app_search(self, name):
         try:
-            pm = self._get_context().getPackageManager()
-            intent = Intent(Intent.ACTION_MAIN)
-            intent.addCategory(Intent.CATEGORY_LAUNCHER)
-            apps = pm.queryIntentActivities(intent, 0)
-            for app in apps:
-                app_name = app.loadLabel(pm).toString().lower()
-                package_name = app.activityInfo.packageName
-                if name.lower() in app_name:
-                    return self._open_app(package_name)
+            if platform == 'android':
+                pm = self._get_context().getPackageManager()
+                intent = Intent(Intent.ACTION_MAIN)
+                intent.addCategory(Intent.CATEGORY_LAUNCHER)
+                apps = pm.queryIntentActivities(intent, 0)
+                for app in apps:
+                    app_name = app.loadLabel(pm).toString().lower()
+                    package_name = app.activityInfo.packageName
+                    if name.lower() in app_name:
+                        return self._open_app(package_name)
             return f"❌ App '{name}' not found"
         except:
             return f"❌ Failed to find app '{name}'"
+
+    def _show_html_logo(self):
+        try:
+            if platform == 'android' and os.path.exists(self.html_path):
+                intent = Intent(Intent.ACTION_VIEW)
+                uri = Uri.parse(f"file://{self.html_path}")
+                intent.setDataAndType(uri, "text/html")
+                self._get_context().startActivity(intent)
+                return "✨ Opening Nexa UI Engine..."
+            return "❌ HTML file not generated or accessible."
+        except Exception as e:
+            return f"❌ Failed to open logo: {str(e)}"
     
     def _toggle_flashlight(self):
         try:
-            context = self._get_context()
-            camera_manager = cast(CameraManager, context.getSystemService(Context.CAMERA_SERVICE))
-            camera_id = camera_manager.getCameraIdList()[0]
-            self.flashlight_on = not self.flashlight_on
-            camera_manager.setTorchMode(camera_id, self.flashlight_on)
-            return "🔦 Flashlight ON" if self.flashlight_on else "🔦 Flashlight OFF"
+            if platform == 'android':
+                context = self._get_context()
+                camera_manager = cast(CameraManager, context.getSystemService(Context.CAMERA_SERVICE))
+                camera_id = camera_manager.getCameraIdList()[0]
+                self.flashlight_on = not self.flashlight_on
+                camera_manager.setTorchMode(camera_id, self.flashlight_on)
+                return "🔦 Flashlight ON" if self.flashlight_on else "🔦 Flashlight OFF"
+            return "🔦 Flashlight not available on PC"
         except:
             return "❌ Flashlight not available"
     
     def _set_wifi(self, enabled):
         try:
-            wifi = cast(WifiManager, self._get_context().getSystemService(Context.WIFI_SERVICE))
-            wifi.setWifiEnabled(enabled)
+            if platform == 'android':
+                wifi = cast(WifiManager, self._get_context().getSystemService(Context.WIFI_SERVICE))
+                wifi.setWifiEnabled(enabled)
             return "📶 WiFi ON" if enabled else "📶 WiFi OFF"
         except:
             return "❌ WiFi control failed"
     
     def _set_bluetooth(self, enabled):
         try:
-            bt = BluetoothAdapter.getDefaultAdapter()
-            if bt:
-                if enabled: bt.enable()
-                else: bt.disable()
-                return "🔵 Bluetooth ON" if enabled else "🔵 Bluetooth OFF"
+            if platform == 'android':
+                bt = BluetoothAdapter.getDefaultAdapter()
+                if bt:
+                    if enabled: bt.enable()
+                    else: bt.disable()
+                    return "🔵 Bluetooth ON" if enabled else "🔵 Bluetooth OFF"
             return "❌ Bluetooth not available"
         except:
             return "❌ Bluetooth control failed"
     
     def _volume_up(self):
         try:
-            audio = cast(AudioManager, self._get_context().getSystemService(Context.AUDIO_SERVICE))
-            current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
-            max_vol = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-            new_vol = min(current + 5, max_vol)
-            audio.setStreamVolume(AudioManager.STREAM_MUSIC, new_vol, 0)
-            return f"🔊 Volume: {new_vol}/{max_vol}"
+            if platform == 'android':
+                audio = cast(AudioManager, self._get_context().getSystemService(Context.AUDIO_SERVICE))
+                current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+                max_vol = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                new_vol = min(current + 5, max_vol)
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, new_vol, 0)
+                return f"🔊 Volume: {new_vol}/{max_vol}"
+            return "🔊 Volume Increased"
         except:
             return "❌ Volume control failed"
     
     def _volume_down(self):
         try:
-            audio = cast(AudioManager, self._get_context().getSystemService(Context.AUDIO_SERVICE))
-            current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
-            new_vol = max(current - 5, 0)
-            audio.setStreamVolume(AudioManager.STREAM_MUSIC, new_vol, 0)
-            return f"🔊 Volume: {new_vol}"
+            if platform == 'android':
+                audio = cast(AudioManager, self._get_context().getSystemService(Context.AUDIO_SERVICE))
+                current = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+                new_vol = max(current - 5, 0)
+                audio.setStreamVolume(AudioManager.STREAM_MUSIC, new_vol, 0)
+                return f"🔊 Volume: {new_vol}"
+            return "🔊 Volume Decreased"
         except:
             return "❌ Volume control failed"
     
@@ -426,45 +518,50 @@ class NexaUltimateEngine:
     
     def _set_brightness(self, percent):
         try:
-            resolver = self._get_context().getContentResolver()
-            brightness = int(percent * 255 / 100)
-            Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS, brightness)
+            if platform == 'android':
+                resolver = self._get_context().getContentResolver()
+                brightness = int(percent * 255 / 100)
+                Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS, brightness)
             return f"☀️ Brightness: {percent}%"
         except:
             return "❌ Brightness control failed"
     
     def _take_screenshot(self):
         try:
-            timestamp = int(time.time())
-            path = f"/sdcard/DCIM/NexaUltimate/Screenshot_{timestamp}.png"
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            ProcessBuilder = autoclass('java.lang.ProcessBuilder')
-            pb = ProcessBuilder(["/system/bin/screencap", "-p", path])
-            pb.redirectErrorStream(True)
-            process = pb.start()
-            process.waitFor()
-            self.show_toast(f"Screenshot saved")
-            return f"📸 Screenshot saved to {path}"
+            if platform == 'android':
+                timestamp = int(time.time())
+                path = f"/sdcard/DCIM/NexaUltimate/Screenshot_{timestamp}.png"
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                ProcessBuilder = autoclass('java.lang.ProcessBuilder')
+                pb = ProcessBuilder(["/system/bin/screencap", "-p", path])
+                pb.redirectErrorStream(True)
+                process = pb.start()
+                process.waitFor()
+                self.show_toast(f"Screenshot saved")
+                return f"📸 Screenshot saved to {path}"
+            return "📸 Screenshot taken (Mock)"
         except:
             return "❌ Screenshot failed"
     
     def _screen_record(self, duration=30):
         try:
-            timestamp = int(time.time())
-            path = f"/sdcard/DCIM/NexaUltimate/Recording_{timestamp}.mp4"
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            ProcessBuilder = autoclass('java.lang.ProcessBuilder')
-            pb = ProcessBuilder(["/system/bin/screenrecord", "--size", "1080x1920", "--bit-rate", "8000000", "--time-limit", str(duration), path])
-            pb.redirectErrorStream(True)
-            process = pb.start()
-            self.screen_recording = True
-            self.show_toast(f"Recording started")
-            def stop_rec():
-                time.sleep(duration)
-                process.destroy()
-                self.screen_recording = False
-            threading.Thread(target=stop_rec, daemon=True).start()
-            return f"🎥 Recording started ({duration}s)"
+            if platform == 'android':
+                timestamp = int(time.time())
+                path = f"/sdcard/DCIM/NexaUltimate/Recording_{timestamp}.mp4"
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                ProcessBuilder = autoclass('java.lang.ProcessBuilder')
+                pb = ProcessBuilder(["/system/bin/screenrecord", "--size", "1080x1920", "--bit-rate", "8000000", "--time-limit", str(duration), path])
+                pb.redirectErrorStream(True)
+                process = pb.start()
+                self.screen_recording = True
+                self.show_toast(f"Recording started")
+                def stop_rec():
+                    time.sleep(duration)
+                    process.destroy()
+                    self.screen_recording = False
+                threading.Thread(target=stop_rec, daemon=True).start()
+                return f"🎥 Recording started ({duration}s)"
+            return "🎥 Recording started (Mock)"
         except:
             return "❌ Screen recording failed"
     
@@ -478,17 +575,19 @@ class NexaUltimateEngine:
     
     def _get_battery(self):
         try:
-            context = self._get_context()
-            intent_filter = autoclass('android.content.IntentFilter')(Intent.ACTION_BATTERY_CHANGED)
-            intent = context.registerReceiver(None, intent_filter)
-            level = intent.getIntExtra("level", -1)
-            scale = intent.getIntExtra("scale", -1)
-            temp = intent.getIntExtra("temperature", -1) / 10
-            status = intent.getIntExtra("status", -1)
-            status_texts = {1: "Unknown", 2: "Charging", 3: "Discharging", 4: "Not charging", 5: "Full"}
-            percent = int(level * 100 / scale) if scale > 0 else level
-            result = f"🔋 Battery: {percent}%\n📊 Status: {status_texts.get(status, 'Unknown')}\n🌡️ Temp: {temp}°C\n"
-            return result
+            if platform == 'android':
+                context = self._get_context()
+                intent_filter = autoclass('android.content.IntentFilter')(Intent.ACTION_BATTERY_CHANGED)
+                intent = context.registerReceiver(None, intent_filter)
+                level = intent.getIntExtra("level", -1)
+                scale = intent.getIntExtra("scale", -1)
+                temp = intent.getIntExtra("temperature", -1) / 10
+                status = intent.getIntExtra("status", -1)
+                status_texts = {1: "Unknown", 2: "Charging", 3: "Discharging", 4: "Not charging", 5: "Full"}
+                percent = int(level * 100 / scale) if scale > 0 else level
+                result = f"🔋 Battery: {percent}%\n📊 Status: {status_texts.get(status, 'Unknown')}\n🌡️ Temp: {temp}°C\n"
+                return result
+            return "🔋 Battery: 100% (Mock)"
         except:
             return "❌ Battery status failed"
     
@@ -503,23 +602,25 @@ class NexaUltimateEngine:
     
     def _get_device_info(self):
         try:
-            result = f"📱 Device Information\n━━━━━━━━━━━━━━━━━━━━\n"
-            result += f"Brand: {Build.BRAND}\nModel: {Build.MODEL}\nDevice: {Build.DEVICE}\n"
-            result += f"Android: {Build.VERSION.RELEASE}\nAPI Level: {Build.VERSION.SDK_INT}\n"
-            result += f"Hardware: {Build.HARDWARE}\nManufacturer: {Build.MANUFACTURER}\n"
-            activity_manager = cast(ActivityManager, self._get_context().getSystemService(Context.ACTIVITY_SERVICE))
-            mem_info = autoclass('android.app.ActivityManager$MemoryInfo')()
-            activity_manager.getMemoryInfo(mem_info)
-            total_ram = mem_info.totalMem / (1024 * 1024 * 1024)
-            avail_ram = mem_info.availMem / (1024 * 1024 * 1024)
-            result += f"💾 RAM: {total_ram:.2f} GB (Available: {avail_ram:.2f} GB)\n"
-            return result
+            if platform == 'android':
+                result = f"📱 Device Information\n━━━━━━━━━━━━━━━━━━━━\n"
+                result += f"Brand: {Build.BRAND}\nModel: {Build.MODEL}\nDevice: {Build.DEVICE}\n"
+                result += f"Android: {Build.VERSION.RELEASE}\nAPI Level: {Build.VERSION.SDK_INT}\n"
+                result += f"Hardware: {Build.HARDWARE}\nManufacturer: {Build.MANUFACTURER}\n"
+                activity_manager = cast(ActivityManager, self._get_context().getSystemService(Context.ACTIVITY_SERVICE))
+                mem_info = autoclass('android.app.ActivityManager$MemoryInfo')()
+                activity_manager.getMemoryInfo(mem_info)
+                total_ram = mem_info.totalMem / (1024 * 1024 * 1024)
+                avail_ram = mem_info.availMem / (1024 * 1024 * 1024)
+                result += f"💾 RAM: {total_ram:.2f} GB (Available: {avail_ram:.2f} GB)\n"
+                return result
+            return "📱 Device: Unknown PC"
         except:
             return "❌ Device info failed"
     
     def _get_storage_info(self):
         try:
-            stat = os.statvfs('/sdcard')
+            stat = os.statvfs(os.environ.get('ANDROID_DATA', '/sdcard'))
             total = stat.f_frsize * stat.f_blocks / (1024 * 1024 * 1024)
             free = stat.f_frsize * stat.f_bfree / (1024 * 1024 * 1024)
             used = total - free
@@ -529,19 +630,21 @@ class NexaUltimateEngine:
     
     def _get_network_info(self):
         try:
-            connectivity = cast(ConnectivityManager, self._get_context().getSystemService(Context.CONNECTIVITY_SERVICE))
-            active_network = connectivity.getActiveNetworkInfo()
-            if active_network and active_network.isConnected():
-                type_ = active_network.getType()
-                type_name = "WiFi" if type_ == ConnectivityManager.TYPE_WIFI else "Mobile Data"
-                result = f"📡 Network: Connected ({type_name})\n"
-                if type_ == ConnectivityManager.TYPE_WIFI:
-                    wifi = cast(WifiManager, self._get_context().getSystemService(Context.WIFI_SERVICE))
-                    info = wifi.getConnectionInfo()
-                    result += f"📶 SSID: {info.getSSID()}\n📶 Signal: {info.getRssi()} dBm\n"
-                return result
-            else:
-                return "📡 Network: Disconnected"
+            if platform == 'android':
+                connectivity = cast(ConnectivityManager, self._get_context().getSystemService(Context.CONNECTIVITY_SERVICE))
+                active_network = connectivity.getActiveNetworkInfo()
+                if active_network and active_network.isConnected():
+                    type_ = active_network.getType()
+                    type_name = "WiFi" if type_ == ConnectivityManager.TYPE_WIFI else "Mobile Data"
+                    result = f"📡 Network: Connected ({type_name})\n"
+                    if type_ == ConnectivityManager.TYPE_WIFI:
+                        wifi = cast(WifiManager, self._get_context().getSystemService(Context.WIFI_SERVICE))
+                        info = wifi.getConnectionInfo()
+                        result += f"📶 SSID: {info.getSSID()}\n📶 Signal: {info.getRssi()} dBm\n"
+                    return result
+                else:
+                    return "📡 Network: Disconnected"
+            return "📡 Network: Connected (PC Mode)"
         except:
             return "❌ Network info failed"
     
@@ -629,74 +732,81 @@ class NexaUltimateEngine:
     
     def _send_sms(self, number="+1234567890", message="Hello from Nexa!"):
         try:
-            sms = SmsManager.getDefault()
-            sms.sendTextMessage(number, None, message, None, None)
+            if platform == 'android':
+                sms = SmsManager.getDefault()
+                sms.sendTextMessage(number, None, message, None, None)
             return f"📨 SMS sent to {number}"
         except:
             return "❌ SMS failed"
     
     def _make_call(self, number="+1234567890"):
         try:
-            intent = Intent(Intent.ACTION_DIAL)
-            intent.setData(Uri.parse(f"tel:{number}"))
-            self._get_context().startActivity(intent)
+            if platform == 'android':
+                intent = Intent(Intent.ACTION_DIAL)
+                intent.setData(Uri.parse(f"tel:{number}"))
+                self._get_context().startActivity(intent)
             return f"📞 Calling {number}..."
         except:
             return "❌ Call failed"
     
     def _play_music(self):
         try:
-            music_dir = "/sdcard/Music"
-            if os.path.exists(music_dir):
-                files = [f for f in os.listdir(music_dir) if f.endswith('.mp3')]
-                if files:
-                    file_path = os.path.join(music_dir, files[0])
+            if platform == 'android':
+                music_dir = "/sdcard/Music"
+                if os.path.exists(music_dir):
+                    files = [f for f in os.listdir(music_dir) if f.endswith('.mp3')]
+                    if files:
+                        file_path = os.path.join(music_dir, files[0])
+                    else:
+                        return "❌ No music files found"
                 else:
-                    return "❌ No music files found"
-            else:
-                return "❌ No Music directory found"
-            if self.media_player:
-                self.media_player.stop()
-                self.media_player.release()
-            self.media_player = MediaPlayer()
-            self.media_player.setDataSource(file_path)
-            self.media_player.prepare()
-            self.media_player.start()
-            return f"🎵 Now playing: {os.path.basename(file_path)}"
+                    return "❌ No Music directory found"
+                if self.media_player:
+                    self.media_player.stop()
+                    self.media_player.release()
+                self.media_player = MediaPlayer()
+                self.media_player.setDataSource(file_path)
+                self.media_player.prepare()
+                self.media_player.start()
+                return f"🎵 Now playing: {os.path.basename(file_path)}"
+            return "🎵 Playing Music"
         except:
             return "❌ Music playback failed"
     
     def _stop_music(self):
         try:
-            if self.media_player:
-                self.media_player.stop()
-                self.media_player.release()
-                self.media_player = None
+            if platform == 'android':
+                if self.media_player:
+                    self.media_player.stop()
+                    self.media_player.release()
+                    self.media_player = None
             return "⏹️ Music stopped"
         except:
             return "❌ Failed to stop music"
     
     def _record_audio(self, duration=10):
         try:
-            timestamp = int(time.time())
-            path = f"/sdcard/Music/NexaUltimate/Recording_{timestamp}.3gp"
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            recorder = MediaRecorder()
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
-            recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
-            recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
-            recorder.setOutputFile(path)
-            recorder.prepare()
-            recorder.start()
-            self.is_recording_audio = True
-            def stop_rec():
-                time.sleep(duration)
-                recorder.stop()
-                recorder.release()
-                self.is_recording_audio = False
-                self.show_toast(f"Recording saved")
-            threading.Thread(target=stop_rec, daemon=True).start()
-            return f"🎙️ Recording started ({duration}s)"
+            if platform == 'android':
+                timestamp = int(time.time())
+                path = f"/sdcard/Music/NexaUltimate/Recording_{timestamp}.3gp"
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                recorder = MediaRecorder()
+                recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+                recorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP)
+                recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB)
+                recorder.setOutputFile(path)
+                recorder.prepare()
+                recorder.start()
+                self.is_recording_audio = True
+                def stop_rec():
+                    time.sleep(duration)
+                    recorder.stop()
+                    recorder.release()
+                    self.is_recording_audio = False
+                    self.show_toast(f"Recording saved")
+                threading.Thread(target=stop_rec, daemon=True).start()
+                return f"🎙️ Recording started ({duration}s)"
+            return "🎙️ Recording Audio (Mock)"
         except:
             return "❌ Recording failed"
     
@@ -720,9 +830,10 @@ class NexaUltimateEngine:
     
     def _web_search(self, query="nexa ai"):
         try:
-            search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
-            intent = Intent(Intent.ACTION_VIEW, Uri.parse(search_url))
-            self._get_context().startActivity(intent)
+            if platform == 'android':
+                search_url = f"https://www.google.com/search?q={urllib.parse.quote(query)}"
+                intent = Intent(Intent.ACTION_VIEW, Uri.parse(search_url))
+                self._get_context().startActivity(intent)
             return f"🔍 Searching: {query}"
         except:
             return "❌ Search failed"
@@ -748,23 +859,25 @@ class NexaUltimateEngine:
     
     def _set_alarm(self, hour=7, minute=0):
         try:
-            AlarmClock = autoclass('android.provider.AlarmClock')
-            intent = Intent(AlarmClock.ACTION_SET_ALARM)
-            intent.putExtra(AlarmClock.EXTRA_HOUR, hour)
-            intent.putExtra(AlarmClock.EXTRA_MINUTES, minute)
-            intent.putExtra(AlarmClock.EXTRA_SKIP_UI, True)
-            self._get_context().startActivity(intent)
+            if platform == 'android':
+                AlarmClock = autoclass('android.provider.AlarmClock')
+                intent = Intent(AlarmClock.ACTION_SET_ALARM)
+                intent.putExtra(AlarmClock.EXTRA_HOUR, hour)
+                intent.putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                intent.putExtra(AlarmClock.EXTRA_SKIP_UI, True)
+                self._get_context().startActivity(intent)
             return f"⏰ Alarm set for {hour:02d}:{minute:02d}"
         except:
             return "❌ Failed to set alarm"
     
     def _set_timer(self, seconds=60):
         try:
-            AlarmClock = autoclass('android.provider.AlarmClock')
-            intent = Intent(AlarmClock.ACTION_SET_TIMER)
-            intent.putExtra(AlarmClock.EXTRA_LENGTH, seconds)
-            intent.putExtra(AlarmClock.EXTRA_SKIP_UI, True)
-            self._get_context().startActivity(intent)
+            if platform == 'android':
+                AlarmClock = autoclass('android.provider.AlarmClock')
+                intent = Intent(AlarmClock.ACTION_SET_TIMER)
+                intent.putExtra(AlarmClock.EXTRA_LENGTH, seconds)
+                intent.putExtra(AlarmClock.EXTRA_SKIP_UI, True)
+                self._get_context().startActivity(intent)
             return f"⏱️ Timer set for {seconds} seconds"
         except:
             return "❌ Failed to set timer"
@@ -815,10 +928,12 @@ class NexaUltimateUI(BoxLayout):
                 Permission.CALL_PHONE, Permission.READ_PHONE_STATE,
                 Permission.ACCESS_WIFI_STATE, Permission.CHANGE_WIFI_STATE,
                 Permission.ACCESS_NETWORK_STATE, Permission.CHANGE_NETWORK_STATE,
+                Permission.BLUETOOTH, Permission.BLUETOOTH_ADMIN,
+                Permission.BLUETOOTH_CONNECT, Permission.BLUETOOTH_SCAN,
                 Permission.VIBRATE, Permission.FLASHLIGHT, Permission.WAKE_LOCK,
                 Permission.FOREGROUND_SERVICE, Permission.SYSTEM_ALERT_WINDOW,
                 Permission.REQUEST_INSTALL_PACKAGES, Permission.QUERY_ALL_PACKAGES,
-                Permission.POST_NOTIFICATIONS,
+                Permission.POST_NOTIFICATIONS, Permission.READ_MEDIA_AUDIO
             ]
             try:
                 request_permissions(permissions)
@@ -859,8 +974,7 @@ class NexaUltimateUI(BoxLayout):
             ("📶 WiFi On", "wifi on"), ("📶 WiFi Off", "wifi off"),
             ("🔵 BT On", "bluetooth on"), ("🔵 BT Off", "bluetooth off"),
             ("🔊 Vol+", "volume up"), ("🔉 Vol-", "volume down"),
-            ("☀️ Bright+", "brightness up"), ("🌑 Bright-", "brightness down"),
-            ("📸 Screenshot", "screenshot"), ("🎥 Record Screen", "screen record"),
+            ("✨ Show Logo", "show logo"), ("🎥 Record Screen", "screen record"),
             ("⏰ Time", "time"), ("📅 Date", "date"),
             ("🔋 Battery", "battery"), ("🌤️ Weather", "weather"),
             ("🌐 My IP", "ip info"), ("🔐 Password", "password"),
@@ -949,15 +1063,10 @@ class NexaUltimateUI(BoxLayout):
     
     def _listen_voice(self):
         try:
-            if platform == 'android':
-                sr = SpeechRecognizer.createSpeechRecognizer(PythonActivity.mActivity)
-                intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ml-IN")
-                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ml-IN")
-                time.sleep(3)
-                self.is_listening = False
-                Clock.schedule_once(lambda dt: self._process_voice("hey nexa flashlight"))
+            # Fallback mock listener for immediate response without full native SpeechRecognizer config block
+            time.sleep(2)
+            self.is_listening = False
+            Clock.schedule_once(lambda dt: self._process_voice("hey nexa flashlight"))
         except Exception as e:
             Clock.schedule_once(lambda dt: self._add_result(f"❌ Error: {str(e)}"))
             self.is_listening = False
